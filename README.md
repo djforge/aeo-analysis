@@ -39,10 +39,10 @@ formats, it walks you through mapping your columns to the required fields.
 
 ```bash
 # Clone or download this repo
-git clone https://github.com/YOUR_ORG/aeo-analysis-skill.git
+git clone https://github.com/djforge/aeo-analysis.git
 
 # Copy the skill directory into your project's Claude commands
-cp -r aeo-analysis-skill/aeo-analysis/ /path/to/your/project/.claude/commands/aeo-analysis/
+cp -r aeo-analysis/aeo-analysis/ /path/to/your/project/.claude/commands/aeo-analysis/
 ```
 
 ### Option 2: Copy into global Claude config
