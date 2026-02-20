@@ -140,25 +140,53 @@ This export format provides **pre-aggregated weekly metrics** rather than indivi
 
 ## Peec
 
-**Auto-detect columns:** `llm_engine`, `query`, `visibility_score`
+Peec does **not** export conversation-level data (individual queries, responses, or per-platform breakdowns). Instead it provides two complementary exports focused on competitive benchmarking and citation gap analysis.
 
-_Note: Peec exports may vary. These mappings are based on known export structures._
+**Auto-detect:** Two CSV files present, one matching `visibility_export_*.csv` and one matching `source-domains-gap-analysis-*_export_*.csv`.
 
-| Peec Column | Standardized Field | Notes |
+---
+
+### Peec — Visibility Export (`visibility_export_from-YYYY-MM-DD_to-YYYY-MM-DD.csv`)
+
+A wide-format table comparing daily visibility scores across all tracked brands. Each row is one brand; each column (after `brand`) is a date.
+
+| Column | Notes |
+|---|---|
+| `brand` | Brand name (one row per tracked brand — the target brand is one of these rows) |
+| `YYYY-MM-DD` columns | Daily visibility score as a percentage string (e.g., `"44.9%"`). One column per day in the export range. |
+
+**What "visibility" means:** The percentage of tracked LLM queries in which that brand was mentioned on that day.
+
+**Analysis approach:**
+- Melt the wide format into long format (brand, date, visibility_pct) for time-series analysis
+- The target brand is identified as the row where `brand` matches the brand name (case-insensitive, including alternates)
+- All other rows are competitors — this file IS the competitive landscape
+- Compute avg, min, max, and std dev of visibility per brand
+- Rank brands by avg visibility — the target brand's rank is its competitive position
+- Aggregate daily → weekly for trend analysis
+- No per-platform, per-prompt, or position data is available from this file
+
+---
+
+### Peec — Source Domains Gap Analysis (`source-domains-gap-analysis-top-1000_export_[brand]_from-YYYY-MM-DD_to-YYYY-MM-DD.csv`)
+
+A ranked list of domains that competitors are being cited from, prioritized by how much the target brand is missing out. The filename includes the target brand name.
+
+| Column | Standardized Field | Notes |
 |---|---|---|
-| `timestamp` or `date` | `date` | May include time component |
-| `llm_engine` | `platform` | LLM engine name |
-| `category` | `topic` | Category/topic |
-| `query` | `prompt` | Prompt text |
-| `mentioned_brands` | `mentions` | Comma-separated |
-| `rank` or `brand_position` | `position` | Numeric position |
-| `is_mentioned` or `mentioned` | `mentioned_flag` | Boolean |
-| `full_response` or `answer` | `response` | Response text |
-| `visibility_score` | _(extra)_ | Peec-specific visibility metric |
-| `references` or `sources` | `citation_*` | May be a single column with delimited URLs |
+| `Domain` | _(domain)_ | Root domain |
+| `Type` | _(domain type)_ | `Corporate` (product/company site), `Competitor` (tracked competitor's own domain), `UGC` (user-generated content, e.g., Reddit), `Editorial` (news/media), `Reference` (review aggregators, directories), `Other` |
+| `Used` | _(citation rate)_ | Percentage of responses that cited this domain (across all tracked queries) |
+| `Gap Score` | _(priority score)_ | Peec's proprietary score quantifying the citation gap — higher = bigger opportunity. Not a raw count. |
 
-**Position format:** Numeric (e.g., `1`, `2`, `3`)
-**Mentioned flag values:** `true`/`false`, `1`/`0`, `Yes`/`No`
+**Analysis approach:**
+- This is a citation **opportunity** file, not a raw citation log
+- Sort by `Gap Score` descending for priority recommendations
+- Group by `Type` to understand the category mix of gaps (e.g., mostly competitor domains vs. editorial vs. UGC)
+- Domains with `Type = Competitor` are competitor-owned sites being heavily cited — useful for competitive intelligence
+- Domains with `Type = Corporate` are third-party product sites — potential partnership or content placement targets
+- Domains with `Type = Editorial` or `UGC` are earned/organic citation opportunities
+- The target brand's own domain may appear in this list if Peec detects it as under-cited relative to competitors
 
 ---
 

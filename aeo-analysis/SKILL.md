@@ -34,11 +34,10 @@ come from the actual CSV.
 Check if a file path was provided as an argument:
 - If `$ARGUMENTS` contains a path, use that file
 - If `$ARGUMENTS` is empty, use Glob to search the working directory for `*.csv` files
-- If multiple CSVs are found, check whether they match the **Scrunch two-file pattern**:
-  - One file matching `report-prompts_performance-*.csv`
-  - One file matching `report-sources_performance-*.csv`
-  - If both are present, automatically treat them as a **Scrunch two-file export** and proceed to Step 1.2 without asking the user to choose
-  - If the files do not match this pattern, use AskUserQuestion to ask which one to analyze
+- If multiple CSVs are found, check whether they match a known two-file pattern (in order):
+  - **Scrunch**: One file matching `report-prompts_performance-*.csv` + one matching `report-sources_performance-*.csv` → automatically treat as a **Scrunch two-file export** and proceed without asking
+  - **Peec**: One file matching `visibility_export_*.csv` + one matching `source-domains-gap-analysis-*_export_*.csv` → automatically treat as a **Peec two-file export** and proceed without asking
+  - If neither pattern matches, use AskUserQuestion to ask which file to analyze
 - Confirm the file(s) exist by reading the first 3 lines of each
 
 ## Step 1.2 — Detect the CSV format
@@ -51,7 +50,7 @@ AEO tool formats.
 - **Profound**: Columns include `run_id`, `platformId`, `normalized_mentions`, and `mentioned?`
 - **Scrunch (single-file)**: Columns include `query_text` or `query`, `ai_platform`, and `brand_mentioned`
 - **Scrunch (two-file performance export)**: Two files detected — the prompts file has columns `prompt_id`, `prompt_text`, `platform`, `week`, `brand_presence_pct`; the sources file has columns `Prompt`, `Platform`, `Domain`, `Source URL`, `Brand Presence`, `Competitor Presence` plus weekly date columns. See `references/csv-formats.md` for the full column mapping and adapted analysis approach.
-- **Peec**: Columns include `llm_engine`, `query`, and `visibility_score`
+- **Peec (two-file export)**: Two files detected — the visibility file has a `brand` column plus daily date columns (YYYY-MM-DD); the gap analysis file has columns `Domain`, `Type`, `Used`, `Gap Score`. See `references/csv-formats.md` for full details. Note: Peec does not export per-query, per-platform, or position data — the analysis approach is fundamentally different from Profound/Scrunch.
 
 If the format is recognized, print which tool was detected and show the column mapping.
 
@@ -103,6 +102,18 @@ The script should:
 - Use `prompt_text` as the topic/prompt grouping since there is no separate topic column
 - Treat each row as a prompt × platform × persona × week aggregate data point, not an individual LLM response
 - Include sentiment analysis as a bonus section using `positive_sentiment_pct`, `mixed_sentiment_pct`, `negative_sentiment_pct`
+
+**If a Peec two-file export was detected**, replace the standard Phase 2 analysis entirely with the following Peec-specific analysis using the visibility file:
+
+- **Melt** the wide-format visibility file (brand × daily dates) into long format (brand, date, visibility_pct)
+- **Dataset overview**: brands tracked (all rows), date range, total daily data points
+- **Brand visibility**: target brand's avg / min / max / std dev visibility over the period; compare to competitor avg
+- **Competitive ranking**: rank all brands by avg visibility — show the full leaderboard with each brand's avg, trend direction, and gap vs. #1
+- **Daily visibility table**: for the target brand, show each day's visibility % with a week-over-week delta column
+- **Weekly trend**: aggregate daily → weekly for target brand and top 3 competitors; show IMPROVING / DECLINING / FLAT direction for each
+- **Volatility analysis**: std dev of daily visibility for each brand — high volatility means inconsistent coverage
+- **Sections 2.3, 2.5, and 2.6** (Position Analysis, Topic Deep Dive, Platform Comparison) are **not applicable** — Peec does not export this data. Print a note explaining the limitation for each.
+- Phase 3 (Citation Analysis) uses the gap analysis file — see below.
 
 ## Section 2.1 — Dataset Overview
 
@@ -182,9 +193,21 @@ Execute the script with `python3`. Print all output to console.
 **Only run this phase if citation data is available.** Citation data comes from one of:
 - **Standard exports**: Citation columns in the main CSV matching `citation_*`, `source_url_*`, `references`, or `sources`
 - **Scrunch two-file export**: The `report-sources_performance-*.csv` file (always present alongside the prompts file)
+- **Peec two-file export**: The `source-domains-gap-analysis-*_export_*.csv` file (always present alongside the visibility file)
 
 If no citation data is available at all, print:
 > "No citation data detected in this export. Skipping citation analysis."
+
+**If a Peec two-file export was detected**, replace the standard Phase 3 citation analysis entirely with the following gap analysis using the `source-domains-gap-analysis-*_export_*.csv` file:
+
+- **Gap overview**: total domains in file, breakdown by `Type` (Corporate / Competitor / UGC / Editorial / Reference / Other), avg and max Gap Score
+- **Top gap opportunities**: top 30 domains sorted by Gap Score descending, showing Domain, Type, Used %, and Gap Score with ASCII bar chart
+- **By domain type**:
+  - `Competitor` domains: these are competitor-owned sites that LLMs cite heavily — list them ranked by Gap Score with Used %
+  - `Corporate` domains: third-party product/company sites — top 20 by Gap Score
+  - `Editorial` + `UGC` domains: earned media and community sites — top 15 by Gap Score
+- **Ask the user for their owned domains** (same prompt as Section 3.3) — check whether any owned domains appear in the gap file and at what Gap Score; if not present, note that the brand's own domain is absent from the gap list entirely
+- **Strategic summary**: which types of domains represent the biggest opportunity (highest combined gap score)
 
 **If a Scrunch two-file performance export was detected**, adapt this phase as follows:
 - Load the sources performance file (`report-sources_performance-*.csv`)
