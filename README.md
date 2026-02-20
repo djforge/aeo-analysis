@@ -19,37 +19,44 @@ AEO tracking tools.
 6. **Platform Comparison** — head-to-head platform performance
 7. **Weekly Trends** — mention rate and position week-over-week
 8. **Citation Analysis** (if available) — domains cited, owned content presence, competitor citations, third-party sources
-9. **Executive Summary** — markdown report with findings and recommendations
+9. **Executive Summary** — markdown report with findings and strategic recommendations
+
+> Some sections are not applicable for all export formats — see tool notes below.
 
 ## Supported AEO Tools
 
-| Tool | Status |
-|---|---|
-| [Profound](https://www.profound.so/) | Fully supported (auto-detected) |
-| [Scrunch](https://scrunch.ai/) | Column mapping supported |
-| [Peec](https://peec.ai/) | Column mapping supported |
-| Other tools | Manual column mapping via interactive prompts |
+| Tool | Export Format | Auto-detected? |
+|---|---|---|
+| [Profound](https://www.profound.so/) | Single CSV with per-response rows | Yes — by `run_id`, `platformId`, `normalized_mentions`, `mentioned?` columns |
+| [Scrunch](https://scrunch.ai/) | Single-file query export | Yes — by `query_text`, `ai_platform`, `brand_mentioned` columns |
+| [Scrunch](https://scrunch.ai/) | Two-file performance export (`report-prompts_performance-*` + `report-sources_performance-*`) | Yes — by filename pattern |
+| [Peec](https://peec.ai/) | Two-file export (`visibility_export_*` + `source-domains-gap-analysis-*_export_*`) | Yes — by filename pattern |
+| Other tools | Any format | Manual column mapping via interactive prompts |
 
-The skill auto-detects known CSV formats by matching column headers. For unrecognized
-formats, it walks you through mapping your columns to the required fields.
+### Tool notes
+
+**Profound** — Full analysis across all sections. Supports per-response citation columns (`citation_1` through `citation_48`).
+
+**Scrunch (single-file)** — Full analysis. Citation columns supported if present in the export.
+
+**Scrunch (two-file performance export)** — Pre-aggregated weekly data, not individual response rows. Brand visibility uses `brand_presence_pct`; position uses top/middle/bottom buckets rather than exact ranks. Competitive landscape is derived from the sources file. Includes a bonus sentiment analysis section. Drop both files in your working directory — the skill picks them up automatically.
+
+**Peec** — Peec does not export per-query or per-platform data. The visibility file is a daily brand comparison table (all tracked brands vs. each other); the gap analysis file shows citation opportunities ranked by gap score. Position analysis, topic deep dive, and platform comparison sections are not applicable. Drop both files in your working directory — the skill picks them up automatically.
 
 ## Installation
 
-### Option 1: Copy into your project (recommended)
+### Option 1: Copy into your project
 
 ```bash
-# Clone or download this repo
 git clone https://github.com/djforge/aeo-analysis.git
 
-# Copy the skill directory into your project's Claude commands
 cp -r aeo-analysis/aeo-analysis/ /path/to/your/project/.claude/commands/aeo-analysis/
 ```
 
-### Option 2: Copy into global Claude config
+### Option 2: Copy into global Claude config (available across all projects)
 
 ```bash
-# For global availability across all projects
-cp -r aeo-analysis-skill/aeo-analysis/ ~/.claude/commands/aeo-analysis/
+cp -r aeo-analysis/aeo-analysis/ ~/.claude/commands/aeo-analysis/
 ```
 
 After copying, the `/aeo-analysis` command will be available in Claude Code.
@@ -60,22 +67,28 @@ After copying, the `/aeo-analysis` command will be available in Claude Code.
 /aeo-analysis path/to/your-export.csv
 ```
 
-If you omit the file path, the skill will search the current directory for CSV files.
+If you omit the file path, the skill searches the current directory for CSV files. For
+**two-file exports** (Scrunch performance or Peec), just place both files in the same
+directory and run `/aeo-analysis` with no argument — the skill auto-detects the pair.
 
 ### What it asks you
 
-1. **Brand name** — your brand + any alternate names / former names
-2. **Owned domains** (for citation analysis) — your website domains
-3. **Column mapping** (only if the CSV format isn't auto-detected)
+1. **Brand name** — your brand plus any alternate names, former names, or common misspellings to treat as the same brand
+2. **Owned domains** (for citation analysis) — e.g., `yourbrand.com, blog.yourbrand.com`
+3. **Column mapping** — only if the CSV format isn't auto-detected
 
-### Example
+### Examples
 
 ```
-/aeo-analysis Feb_12_4_weeks_profound_raw_data_with_citations.csv
+# Single file
+/aeo-analysis profound_export_feb_2026.csv
+
+# Two-file export — just run from the directory containing both files
+/aeo-analysis
 ```
 
 Output:
-- Full analysis printed to console (7 sections + citation analysis)
+- Full analysis printed to console
 - `aeo_exec_summary.md` written to your working directory
 
 ## Requirements
@@ -99,39 +112,39 @@ aeo-analysis/
 
 ## Example Output
 
-### Console output (abbreviated)
+### Console output (abbreviated, Profound format)
 
 ```
-================================================================================
-  1. DATASET OVERVIEW
-================================================================================
+========================================================================
+  SECTION 2.1 — DATASET OVERVIEW
+========================================================================
 Total rows:              9,323
 Date range:              2026-01-15 to 2026-02-11
 Platforms tracked:       3
 Unique prompts:          85
 Topics tracked:          12
 
---- Rows per Platform ---
-  Google AI Overviews                 3,340 rows  (35.8%)
-  ChatGPT                            3,154 rows  (33.8%)
-  Perplexity                         2,829 rows  (30.3%)
+  Platforms:
+    Google AI Overviews     3,340 rows  (35.8%)
+    ChatGPT                 3,154 rows  (33.8%)
+    Perplexity              2,829 rows  (30.3%)
 
-================================================================================
-  2. BRAND VISIBILITY
-================================================================================
+========================================================================
+  SECTION 2.2 — BRAND VISIBILITY
+========================================================================
 Overall mention rate:    4,661 / 9,323 = 50.0%
 
---- Mention Rate by Platform ---
-  Google AI Overviews                 1,804 / 3,340  = 54.0%
-  ChatGPT                            1,621 / 3,154  = 51.4%
-  Perplexity                         1,236 / 2,829  = 43.7%
-  ...
+  By Platform:
+    Google AI Overviews     1,804 / 3,340  = 54.0%
+    ChatGPT                 1,621 / 3,154  = 51.4%
+    Perplexity              1,236 / 2,829  = 43.7%
 ```
 
 ### Executive summary (`aeo_exec_summary.md`)
 
 A complete markdown report including TL;DR, key findings across all analysis areas,
-competitive context, citation analysis (when available), and strategic recommendations.
+competitive context, citation analysis (when available), and strategic recommendations
+organized into immediate, medium-term, and strategic actions.
 
 ## Contributing
 
@@ -141,4 +154,4 @@ competitive context, citation analysis (when available), and strategic recommend
 
 ## License
 
-Apache-2.0 — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).
