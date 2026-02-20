@@ -34,8 +34,12 @@ come from the actual CSV.
 Check if a file path was provided as an argument:
 - If `$ARGUMENTS` contains a path, use that file
 - If `$ARGUMENTS` is empty, use Glob to search the working directory for `*.csv` files
-- If multiple CSVs are found, use AskUserQuestion to ask which one to analyze
-- Confirm the file exists by reading the first 3 lines
+- If multiple CSVs are found, check whether they match the **Scrunch two-file pattern**:
+  - One file matching `report-prompts_performance-*.csv`
+  - One file matching `report-sources_performance-*.csv`
+  - If both are present, automatically treat them as a **Scrunch two-file export** and proceed to Step 1.2 without asking the user to choose
+  - If the files do not match this pattern, use AskUserQuestion to ask which one to analyze
+- Confirm the file(s) exist by reading the first 3 lines of each
 
 ## Step 1.2 — Detect the CSV format
 
@@ -45,7 +49,8 @@ AEO tool formats.
 
 **Auto-detection rules:**
 - **Profound**: Columns include `run_id`, `platformId`, `normalized_mentions`, and `mentioned?`
-- **Scrunch**: Columns include `query_text` or `query`, `ai_platform`, and `brand_mentioned`
+- **Scrunch (single-file)**: Columns include `query_text` or `query`, `ai_platform`, and `brand_mentioned`
+- **Scrunch (two-file performance export)**: Two files detected — the prompts file has columns `prompt_id`, `prompt_text`, `platform`, `week`, `brand_presence_pct`; the sources file has columns `Prompt`, `Platform`, `Domain`, `Source URL`, `Brand Presence`, `Competitor Presence` plus weekly date columns. See `references/csv-formats.md` for the full column mapping and adapted analysis approach.
 - **Peec**: Columns include `llm_engine`, `query`, and `visibility_score`
 
 If the format is recognized, print which tool was detected and show the column mapping.
@@ -69,7 +74,7 @@ Use AskUserQuestion to ask the user:
 
 > What is the brand name to analyze? Also list any alternate names, former names,
 > or common misspellings that should be treated as the same brand.
-> (Example: "Tiger Data" with alternates "Timescale, TimescaleDB, TigerData")
+> (Example: "Acme Health" with alternates "AcmeHealth, Acme Corp")
 
 Store the primary brand name and all alternates for use throughout the analysis.
 
@@ -90,6 +95,14 @@ The script should:
 - Handle edge cases (missing data, empty columns, etc.) gracefully
 
 **IMPORTANT:** Use the column mapping from Phase 1. Do NOT hardcode column names.
+
+**If a Scrunch two-file performance export was detected**, adapt the analysis as follows:
+- Use `brand_presence_pct` (a pre-aggregated weekly percentage, 0–100) as the mention rate — do NOT look for a boolean `mentioned_flag` column
+- Position is expressed as three buckets (`top_position_pct`, `middle_position_pct`, `bottom_position_pct`) — compute an approximate numeric score (top≈1, middle≈2.5, bottom≈4) rather than exact rank counts
+- Competitive landscape (Section 2.4) cannot be derived from the prompts file — note this and defer to the sources file analysis in Phase 3
+- Use `prompt_text` as the topic/prompt grouping since there is no separate topic column
+- Treat each row as a prompt × platform × persona × week aggregate data point, not an individual LLM response
+- Include sentiment analysis as a bonus section using `positive_sentiment_pct`, `mixed_sentiment_pct`, `negative_sentiment_pct`
 
 ## Section 2.1 — Dataset Overview
 
@@ -166,13 +179,21 @@ Execute the script with `python3`. Print all output to console.
 
 # Phase 3: Citation Analysis (Conditional)
 
-**Only run this phase if the CSV contains citation columns** (columns matching the pattern
-`citation_*`, `source_url_*`, `references`, or `sources`).
+**Only run this phase if citation data is available.** Citation data comes from one of:
+- **Standard exports**: Citation columns in the main CSV matching `citation_*`, `source_url_*`, `references`, or `sources`
+- **Scrunch two-file export**: The `report-sources_performance-*.csv` file (always present alongside the prompts file)
 
-If no citation columns exist, print:
-> "No citation columns detected in this export. Skipping citation analysis."
+If no citation data is available at all, print:
+> "No citation data detected in this export. Skipping citation analysis."
 
-If citation columns exist, write and run a SECOND Python script that performs:
+**If a Scrunch two-file performance export was detected**, adapt this phase as follows:
+- Load the sources performance file (`report-sources_performance-*.csv`)
+- Weekly date columns (YYYY-MM-DD format) contain citation frequency rates (proportion of responses per week that cited each URL) — sum these across all weeks for total citation weight
+- `Brand Presence` column ("Yes"/"No") indicates whether the target brand was mentioned in responses that cited this URL
+- `Competitor Presence` column contains competitor brand name(s) associated with this URL — use this to derive the competitive landscape from Section 2.4
+- All domain-level analysis should use summed citation weight rather than raw citation counts
+
+Otherwise, write and run a SECOND Python script that performs:
 
 ## Section 3.1 — Citation Overview
 
@@ -191,7 +212,7 @@ Print:
 ## Section 3.3 — Brand's Owned Domain Citations
 
 Ask the user (if not already known):
-> What are your brand's owned domains? (e.g., "tigerdata.com, timescale.com, github.com/timescale")
+> What are your brand's owned domains? (e.g., "acmehealth.com, blog.acmehealth.com, github.com/acmehealth")
 
 Then print:
 - Total citations to owned domains (count and % of all citations)
